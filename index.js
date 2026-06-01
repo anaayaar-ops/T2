@@ -7,10 +7,10 @@ const { WOLF } = wolfjs;
 const client = new WOLF();
 
 // --- الإعدادات ---
-const TARGET_USER_ID = 76023604; 
-const CHANNEL_TASKS = 224;
-const CHANNEL_ALLIANCE = 224;
-const TARGET_PLAYER_NAME = 'Atangana';
+const TARGET_USER_ID = 84520026; 
+const CHANNEL_TASKS = 22271611;
+const CHANNEL_ALLIANCE = 22271611;
+const TARGET_PLAYER_NAME = 'T';
 
 // متغيرات التحكم
 let currentInterval = 306000;
