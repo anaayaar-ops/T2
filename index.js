@@ -31,7 +31,7 @@ async function startAutomation() {
         } catch (err) {
             console.error("❌ خطأ في إرسال صندوق الفتح:", err.message);
         }
-    }, 10 * 60 * 1000);
+    }, 3 * 60 * 1000);
 
     // 2. مهمة صندوق ضمان وقت كل ساعة (3,600,000 مللي ثانية)
     setInterval(async () => {
@@ -59,7 +59,7 @@ async function startAutomation() {
 
             // 3. انتظار 64 ثانية للدورة التالية
             console.log("⏳ بانتظار 64 ثانية للبدء من جديد...");
-            await sleep(64000);
+            await sleep(306000);
 
         } catch (err) {
             console.error("❌ خطأ في الأتمتة:", err.message);
