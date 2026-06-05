@@ -4,13 +4,13 @@ import wolfjs from 'wolf.js';
 const { WOLF } = wolfjs;
 const client = new WOLF();
 
-const TARGET_USER_ID = 80055399;
-const CHANNEL_ID = 81889058;
+const TARGET_USER_ID = 75423789;
+const CHANNEL_ID = 18432094;
 
 // دالة لتوليد تأخير عشوائي بين 5 و 10 ثواني
 const randomDelay = () => {
-    const min = 5000; // 5 ثواني
-    const max = 10000; // 10 ثواني
+    const min = 3000; // 5 ثواني
+    const max = 6000; // 10 ثواني
     const delay = Math.floor(Math.random() * (max - min + 1) + min);
     return new Promise(resolve => setTimeout(resolve, delay));
 };
