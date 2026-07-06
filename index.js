@@ -7,9 +7,9 @@ const { WOLF } = wolfjs;
 const client = new WOLF();
 
 // --- الإعدادات ---
-const TARGET_USER_ID = 76023604; 
-const CHANNEL_TASKS = 224 ;       // قناة المهام
-const CHANNEL_ALLIANCE = 224;    // قناة التحالف
+const TARGET_USER_ID = 9969; 
+const CHANNEL_TASKS = 9969 ;       // قناة المهام
+const CHANNEL_ALLIANCE = 9969;    // قناة التحالف
 const TARGET_PLAYER_NAME = 'cat'; 
 
 client.on('ready', async () => {
