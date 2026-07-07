@@ -9,7 +9,7 @@ service.on('ready', async () => {
     console.log(`✅ تم تسجيل الدخول: ${service.currentSubscriber.nickname}`);
 
     const targetChannelId = 66266; // قناة "واو"
-    const imagePath = './178332617173751.png'; // 👈 اسم الصورة الصحيح
+    const imagePath = './178332617173751.jpeg'; // 👈 اسم الصورة الصحيح
 
     if (!fs.existsSync(imagePath)) {
         console.error(`❌ الصورة غير موجودة بالمسار: ${imagePath}`);
