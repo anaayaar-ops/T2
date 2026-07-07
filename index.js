@@ -6,9 +6,10 @@ const { WOLF } = wolfjs;
 
 const service = new WOLF();
 
+// القائمة الكاملة (32 اسم) كما وردت في طلبك وملف h11/h12
 const eventNames = [
-    "سوالف وافكار", "تحديات", "ساعة تسلية", "شغّل عقلك", "سوالف ونقاشات", "لعب وطرب",
-    "خمن الرقم", "سوالف صباحيه", "تحديات خليجنا ذوق", "تحديات ذهنية", "تحدي التخمين",
+    "سوالف وافكار", "تحديات", "ساعة تسلية", "شغّل عقلك", "سوالف ونقاشات", "لعب وطرب", 
+    "خمن الرقم", "سوالف صباحيه", "تحديات خليجنا ذوق", "تحديات ذهنية", "تحدي التخمين", 
     "صباحيات خليجنا ذوق", "تصادمات رقمية", "جيبها بالثانيه", "سوالف والعاب", "تحدي سهم",
     "فـ الصحيح", "رتب الحروف", "جلسات حوارية", "منوعات", "تحدي كرة", "سوالف خليجنا ذوق",
     "تحديات منوعة", "تحديات رقمية", "ساعه نقاش", "فقرات منوعة", "أرقام الحظ", "تحدي الزمن",
@@ -26,95 +27,97 @@ const formatAMPM = (date) => {
 
 service.on('ready', async () => {
     console.log(`✅ تم تسجيل الدخول: ${service.currentSubscriber.nickname}`);
+    
+    const targetGroup = 18432094;
+    const totalEvents = 32;
+    let startTime = new Date(2026, 6, 10, 21, 0, 0); // تبدأ من 12:00 AM يوم 18 فبراير
+    const surveyRecords = [];
 
-    const targetChannelId = 66266;
-    const imagePath = './178332617173751.jpeg';
+    try {
+        console.log("🔍 فحص التعارض في الروم...");
+        const listRes = await service.websocket.emit('group event list', { groupId: targetGroup, languageId: 1 });
+        const existingEvents = listRes.success ? listRes.body : [];
 
-    if (!fs.existsSync(imagePath)) {
-        console.error(`❌ الصورة غير موجودة بالمسار: ${imagePath}`);
-        process.exit(1);
-    }
+        for (let i = 0; i < totalEvents; i++) {
+            const title = eventNames[i];
+            const endTime = new Date(startTime.getTime() + 45 * 60000);
 
-    console.log('🔄 جاري تحويل الصورة إلى JPEG...');
-    const thumbnailBuffer = await sharp(imagePath)
-        .jpeg({ quality: 90 })
-        .toBuffer();
-    console.log('✅ تم تحويل الصورة بنجاح');
-
-    // 🔍 اجلب كل الفعاليات الموجودة حاليًا بالقناة (يدوية أو تلقائية)
-    console.log('🔍 جاري فحص الفعاليات الموجودة بالقناة...');
-    const existingEvents = await service.event.group.getList(targetChannelId, false, true);
-    console.log(`📋 عدد الفعاليات الموجودة حاليًا: ${existingEvents.length}`);
-
-    let startTime = new Date(2026, 6, 10, 21, 0, 0);
-    const successList = [];
-    const failList = [];
-    const skippedList = [];
-
-    for (let i = 0; i < eventNames.length; i++) {
-        const title = eventNames[i];
-        const endTime = new Date(startTime.getTime() + 45 * 60000);
-
-        // ✅ فحص التعارض مع أي فعالية موجودة (يدوية أو مبرمجة)
-        const isConflicting = existingEvents.some(event => {
-            const eStart = new Date(event.startsAt).getTime();
-            const eEnd = new Date(event.endsAt).getTime();
-            return (startTime.getTime() < eEnd && endTime.getTime() > eStart);
-        });
-
-        if (isConflicting) {
-            console.log(`⚠️ [${i + 1}/32] تجاوز [${title}]: الوقت ${formatAMPM(startTime)} محجوز مسبقًا.`);
-            skippedList.push({ title, time: formatAMPM(startTime) });
-            startTime = new Date(endTime.getTime());
-            continue; // 👈 يتخطى هذا الوقت وينتقل للفعالية الجاية
-        }
-
-        try {
-            const result = await service.event.group.create(targetChannelId, {
-                title: title,
-                startsAt: startTime,
-                endsAt: endTime,
-                shortDescription: `فعالية ${title}`,
-                longDescription: `فعالية ${title} ضمن سلسلة فعاليات خليجنا ذوق.`,
-                thumbnail: thumbnailBuffer
+            // فحص إذا كان الوقت محجوز
+            const isConflicting = existingEvents.some(event => {
+                const eStart = new Date(event.startsAt).getTime();
+                const eEnd = new Date(event.endsAt).getTime();
+                return (startTime.getTime() < eEnd && endTime.getTime() > eStart);
             });
 
-            const [eventResponse, imageResponse] = Array.isArray(result) ? result : [result, null];
-
-            if (eventResponse.success) {
-                const fTime = formatAMPM(startTime);
-                console.log(`🚀 [${i + 1}/32] تم: ${title} | ${fTime} | ID: ${eventResponse.body.id}`);
-
-                if (imageResponse && !imageResponse.success) {
-                    console.log(`   ⚠️ لكن الصورة فشلت: ${JSON.stringify(imageResponse)}`);
-                }
-
-                // 👇 نضيف الفعالية الجديدة لقائمة existingEvents فورًا
-                // عشان الفعاليات الجاية بالـ loop تتفادى التعارض معاها هي كمان
-                existingEvents.push({ startsAt: startTime, endsAt: endTime });
-
-                successList.push({ title, id: eventResponse.body.id, time: fTime });
+            if (isConflicting) {
+                console.log(`⚠️ تجاوز [${title}]: الوقت ${formatAMPM(startTime)} محجوز.`);
             } else {
-                console.log(`❌ [${i + 1}/32] فشل: ${title}`, eventResponse);
-                failList.push(title);
+                const response = await service.websocket.emit('group event create', {
+                    groupId: targetGroup,
+                    title: title,
+                    startsAt: startTime.toISOString(),
+                    endsAt: endTime.toISOString(),
+                    category: 1, // Challenge
+                    languageId: 1
+                });
+
+                if (response.success) {
+                    const fDate = `${startTime.getDate()}/${startTime.getMonth() + 1}/${startTime.getFullYear()}`;
+                    const fTime = formatAMPM(startTime);
+
+                    // تخزين البيانات بنظام الاختيار الدوري للاستبيان
+                    surveyRecords.push({
+                        membership: "224",
+                        room: "66266",
+                        isWeekly: "نعم",
+                        choiceIndex: i, // سيختار الخيار 1، ثم 2، وهكذا في المتصفح
+                        date: fDate,
+                        time: fTime,
+                        id: response.body.id.toString()
+                    });
+                    console.log(`🚀 تم الرفع: ${title} | الوقت: ${fTime} | ID: ${response.body.id}`);
+                }
             }
-        } catch (err) {
-            console.error(`❌ [${i + 1}/32] خطأ بـ [${title}]:`, err.message);
-            failList.push(title);
+            startTime = new Date(endTime.getTime());
         }
 
-        startTime = new Date(endTime.getTime());
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        // ============ رفع الصور بعد ما خلصت كل الفعاليات ============
+        console.log("\n🖼️ جاري رفع الصور لكل الفعاليات...");
+
+        const imagePath = './178332617173751.jpeg'; // 👈 غيّر الاسم لو غيرت الصورة
+        if (fs.existsSync(imagePath)) {
+            const thumbnailBuffer = await sharp(imagePath).jpeg({ quality: 90 }).toBuffer();
+
+            for (const record of surveyRecords) {
+                try {
+                    const imageResponse = await service.event.group.updateThumbnail(
+                        parseInt(record.id),
+                        thumbnailBuffer
+                    );
+                    console.log(imageResponse.success
+                        ? `🖼️ تم رفع صورة: ID ${record.id}`
+                        : `⚠️ فشلت صورة ID ${record.id}: ${JSON.stringify(imageResponse)}`
+                    );
+                } catch (err) {
+                    console.error(`❌ خطأ برفع صورة ID ${record.id}:`, err.message);
+                }
+                await new Promise(resolve => setTimeout(resolve, 800));
+            }
+        } else {
+            console.error(`❌ الصورة غير موجودة بالمسار: ${imagePath}`);
+        }
+
+        // إنشاء ملف البيانات للمتصفح
+        const jsData = `const allEvents = ${JSON.stringify(surveyRecords, null, 2)};`;
+        fs.writeFileSync('./survey_data.js', jsData, 'utf8');
+        console.log("🏁 انتهى الرفع. ملف survey_data.js جاهز للاستخدام.");
+
+    } catch (err) {
+        console.error("❌ خطأ:", err.message);
+
     }
-
-    console.log(`\n🏁 انتهى الرفع.`);
-    console.log(`✅ نجح: ${successList.length} / 32`);
-    console.log(`⚠️ متجاوز (تعارض): ${skippedList.length}`);
-    console.log(`❌ فشل: ${failList.length}`);
-    if (skippedList.length > 0) console.log(`الفعاليات المتجاوزة:`, skippedList);
-    if (failList.length > 0) console.log(`الفعاليات الفاشلة:`, failList);
-
-    process.exit(0);
+    process.exit();
 });
+
 
 service.login(process.env.U_MAIL, process.env.U_PASS);
