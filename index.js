@@ -1,19 +1,28 @@
 import 'dotenv/config';
-import wolfjs from 'wolf.js';
-const { WOLF } = wolfjs;
+import fs from 'fs';
+import path from 'path';
 
-const service = new WOLF();
+function searchFiles(dir, keyword, results = []) {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+        const fullPath = path.join(dir, file);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+            searchFiles(fullPath, keyword, results);
+        } else if (file.endsWith('.js')) {
+            const content = fs.readFileSync(fullPath, 'utf8');
+            if (content.includes(keyword)) {
+                const lines = content.split('\n');
+                lines.forEach((line, i) => {
+                    if (line.includes(keyword)) {
+                        results.push(`${fullPath}:${i + 1} → ${line.trim()}`);
+                    }
+                });
+            }
+        }
+    }
+    return results;
+}
 
-service.on('ready', async () => {
-    console.log(`✅ ${service.currentSubscriber.nickname}`);
-
-    console.log("\n=== كود دالة multimedia.upload ===");
-    console.log(service.multimedia.upload.toString());
-
-    console.log("\n=== كود دالة multimedia.request ===");
-    console.log(service.multimedia.request.toString());
-
-    process.exit(0);
-});
-
-service.login(process.env.U_MAIL, process.env.U_PASS);
+const results = searchFiles('./node_modules/wolf.js/src', 'route:', []);
+results.forEach(r => console.log(r));
