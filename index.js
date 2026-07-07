@@ -28,7 +28,7 @@ service.on('ready', async () => {
     console.log(`✅ تم تسجيل الدخول: ${service.currentSubscriber.nickname}`);
 
     const targetChannelId = 66266;
-    const imagePath = './178332617173751.png';
+    const imagePath = './178332617173751.jpeg';
 
     if (!fs.existsSync(imagePath)) {
         console.error(`❌ الصورة غير موجودة بالمسار: ${imagePath}`);
