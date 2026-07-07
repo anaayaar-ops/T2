@@ -12,17 +12,19 @@ function searchFiles(dir, keyword, results = []) {
         } else if (file.endsWith('.js')) {
             const content = fs.readFileSync(fullPath, 'utf8');
             if (content.includes(keyword)) {
-                const lines = content.split('\n');
-                lines.forEach((line, i) => {
-                    if (line.includes(keyword)) {
-                        results.push(`${fullPath}:${i + 1} → ${line.trim()}`);
-                    }
-                });
+                results.push({ file: fullPath, content });
             }
         }
     }
     return results;
 }
 
-const results = searchFiles('./node_modules/wolf.js/src', 'route:', []);
-results.forEach(r => console.log(r));
+// نطبع الملف كامل لما يحتوي على multimedia.upload
+const matches = searchFiles('./node_modules/wolf.js/src', 'multimedia.upload', []);
+
+console.log(`عدد الملفات اللي فيها multimedia.upload: ${matches.length}\n`);
+
+matches.forEach(m => {
+    console.log(`\n========== ${m.file} ==========`);
+    console.log(m.content);
+});
