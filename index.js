@@ -28,7 +28,7 @@ const formatAMPM = (date) => {
 service.on('ready', async () => {
     console.log(`✅ تم تسجيل الدخول: ${service.currentSubscriber.nickname}`);
     
-    const targetGroup = 18432094;
+    const targetGroup = 66266;
     const totalEvents = 32;
     let startTime = new Date(2026, 6, 10, 21, 0, 0); // تبدأ من 12:00 AM يوم 18 فبراير
     const surveyRecords = [];
