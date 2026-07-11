@@ -10,6 +10,6 @@ await client.login(
   "m22@gmail.com",
   "As111a",
   "000",
-  OnlineState.ONLINE,
+  ,
   LoginType.SNAPCHAT
 );
