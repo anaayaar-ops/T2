@@ -1,29 +1,64 @@
 import { WOLF } from 'wolf.js';
+import fs from 'fs';
+import imageSize from 'image-size';
+import { fileTypeFromBuffer } from 'file-type';
 
 const client = new WOLF();
 
-// بيانات الدخول من GitHub Secrets
 client.config.framework.login.email = process.env.U_MAIL;
 client.config.framework.login.password = process.env.U_PASS;
 
-client.on('ready', () => {
-  console.log('✅ Bot connected successfully\n');
+const CHANNEL_ID = 81889058;
+const FILE_PATH = './avatar.gif'; // غيّر المسار لمكان ملفك الفعلي
 
-  const avatarConfig = client._frameworkConfig.get('multimedia.avatar.channel');
+client.on('ready', async () => {
+  console.log('✅ Bot connected successfully');
 
-  console.log('===== شروط رفع صورة القناة (Channel Avatar) =====\n');
+  if (!fs.existsSync(FILE_PATH)) {
+    console.log(`❌ File not found: ${FILE_PATH}`);
+    return client.logout();
+  }
 
-  console.log(`🔲 يجب أن تكون الصورة مربعة (Square): ${avatarConfig.square ? 'نعم' : 'لا'}\n`);
+  const buffer = fs.readFileSync(FILE_PATH);
 
-  console.log('📋 الأنواع المسموحة (Mime Types) والحد الأقصى للحجم لكل نوع:\n');
+  // تحقق سريع قبل الإرسال
+  const { mime } = await fileTypeFromBuffer(buffer);
+  const size = imageSize(buffer);
+  const fileSizeMB = (Buffer.byteLength(buffer) / 1024 / 1024).toFixed(2);
 
-  avatarConfig.mimes.forEach((mimeConfig) => {
-    const sizeMB = (mimeConfig.size / 1024 / 1024).toFixed(2);
-    console.log(`  • ${mimeConfig.type} → الحد الأقصى: ${mimeConfig.size} بايت (${sizeMB} MB)`);
-  });
+  console.log(`🔍 Mime: ${mime} | Dimensions: ${size.width}x${size.height} | Size: ${fileSizeMB} MB`);
 
-  console.log('\n===== الإعدادات الكاملة (Raw JSON) =====\n');
-  console.log(JSON.stringify(avatarConfig, null, 2));
+  if (mime !== 'image/gif') {
+    console.log('❌ الملف مش GIF فعليًا');
+    return client.logout();
+  }
+
+  if (size.width !== size.height) {
+    console.log('❌ الصورة مش مربعة');
+    return client.logout();
+  }
+
+  if (Buffer.byteLength(buffer) > 2621440) {
+    console.log('❌ الحجم أكبر من المسموح (2.5MB)');
+    return client.logout();
+  }
+
+  console.log('✅ كل الشروط متحققة، جاري الرفع...');
+
+  try {
+    const response = await client.channel.update(CHANNEL_ID, {
+      avatar: buffer
+    });
+
+    if (response.success) {
+      console.log('🎉 تم تحديث صورة القناة بنجاح!');
+      console.log(response.body.avatarUpload);
+    } else {
+      console.log('❌ فشل التحديث:', response);
+    }
+  } catch (error) {
+    console.error('❌ حصل خطأ أثناء الرفع:', error.message, error);
+  }
 
   client.logout();
 });
