@@ -1,14 +1,31 @@
 import { WOLF } from 'wolf.js';
-import fs from 'fs';
-import imageSize from 'image-size';
 
 const client = new WOLF();
 
-client.on('ready', () => {
-  console.log('Bot is ready!');
+// بيانات الدخول من GitHub Secrets
+client.config.framework.login.email = process.env.U_MAIL;
+client.config.framework.login.password = process.env.U_PASS;
 
-  // اطبع إعدادات الأفاتار الخاصة بالقنوات (الأنواع المسموحة + الحجم الأقصى)
-  console.log(client._frameworkConfig.get('multimedia.avatar.channel'));
+client.on('ready', () => {
+  console.log('✅ Bot connected successfully\n');
+
+  const avatarConfig = client._frameworkConfig.get('multimedia.avatar.channel');
+
+  console.log('===== شروط رفع صورة القناة (Channel Avatar) =====\n');
+
+  console.log(`🔲 يجب أن تكون الصورة مربعة (Square): ${avatarConfig.square ? 'نعم' : 'لا'}\n`);
+
+  console.log('📋 الأنواع المسموحة (Mime Types) والحد الأقصى للحجم لكل نوع:\n');
+
+  avatarConfig.mimes.forEach((mimeConfig) => {
+    const sizeMB = (mimeConfig.size / 1024 / 1024).toFixed(2);
+    console.log(`  • ${mimeConfig.type} → الحد الأقصى: ${mimeConfig.size} بايت (${sizeMB} MB)`);
+  });
+
+  console.log('\n===== الإعدادات الكاملة (Raw JSON) =====\n');
+  console.log(JSON.stringify(avatarConfig, null, 2));
+
+  client.logout();
 });
 
 client.login();
