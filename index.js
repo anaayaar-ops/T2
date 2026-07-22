@@ -21,15 +21,15 @@ async function startLoop() {
 
             // 1. إرسال أمر القصف
             await client.messaging.sendGroupMessage(CHANNEL_ID, '!ط قصف');
-            await sleep(1000); // انتظار ثانية واحدة
+            await sleep(2000); // انتظار ثانيتين
 
-            // 2. إرسال أمر الهدية مع العضوية المحددة
-            await client.messaging.sendGroupMessage(CHANNEL_ID, `!ط هدية "${TARGET_MEMBER}" 2000`);
-            await sleep(1000); // انتظار ثانية واحدة
+            // 2. إرسال أمر الهدية مع العضوية بدون علامات تنصيص
+            await client.messaging.sendGroupMessage(CHANNEL_ID, `!ط هدية ${TARGET_MEMBER} 2000`);
+            await sleep(2000); // انتظار ثانيتين
 
-            // 3. إرسال أمر الهجوم مع العضوية المحددة
-            await client.messaging.sendGroupMessage(CHANNEL_ID, `!ط هجوم "${TARGET_MEMBER}"`);
-            await sleep(1000); // انتظار ثانية واحدة
+            // 3. إرسال أمر الهجوم مع العضوية بدون علامات تنصيص
+            await client.messaging.sendGroupMessage(CHANNEL_ID, `!ط هجوم ${TARGET_MEMBER}`);
+            await sleep(2000); // انتظار ثانيتين
 
             // 4. إرسال أمر التحالف
             await client.messaging.sendGroupMessage(CHANNEL_ID, '!ط تحالف ايداع كل');
