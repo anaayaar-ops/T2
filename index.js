@@ -20,19 +20,19 @@ async function startLoop() {
             console.log('بدء تنفيذ دورة الأوامر الجديدة...');
 
             // 1. إرسال أمر القصف
-            await client.channel.send(CHANNEL_ID, '!ط قصف');
+            await client.messaging.sendGroupMessage(CHANNEL_ID, '!ط قصف');
             await sleep(1000); // انتظار ثانية واحدة
 
             // 2. إرسال أمر الهدية مع العضوية المحددة
-            await client.channel.send(CHANNEL_ID, `!ط هدية "${TARGET_MEMBER}" 2000`);
+            await client.messaging.sendGroupMessage(CHANNEL_ID, `!ط هدية "${TARGET_MEMBER}" 2000`);
             await sleep(1000); // انتظار ثانية واحدة
 
             // 3. إرسال أمر الهجوم مع العضوية المحددة
-            await client.channel.send(CHANNEL_ID, `!ط هجوم "${TARGET_MEMBER}"`);
+            await client.messaging.sendGroupMessage(CHANNEL_ID, `!ط هجوم "${TARGET_MEMBER}"`);
             await sleep(1000); // انتظار ثانية واحدة
 
             // 4. إرسال أمر التحالف
-            await client.channel.send(CHANNEL_ID, '!ط تحالف ايداع كل');
+            await client.messaging.sendGroupMessage(CHANNEL_ID, '!ط تحالف ايداع كل');
 
             console.log('تم الانتهاء من إرسال الأوامر. جاري الانتظار لمدة 6 دقائق...');
             
