@@ -2,7 +2,7 @@ const { WOLF } = require('wolf.js');
 const client = new WOLF();
 
 const CHANNEL_ID = 66266;
-const TARGET_MEMBER = 00200;
+const TARGET_MEMBER = "00200";
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
