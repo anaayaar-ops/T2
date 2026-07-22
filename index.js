@@ -1,7 +1,6 @@
 import { WOLF } from 'wolf.js';
 const client = new WOLF();
 
-
 const CHANNEL_ID = 66266;
 const TARGET_MEMBER = "002002";
 
@@ -51,4 +50,5 @@ async function startLoop() {
     }
 }
 
-client.login(U_MAIL, U_PASS);
+// تسجيل الدخول باستخدام متغيرات بيئة النظام
+client.login(process.env.U_MAIL, process.env.U_PASS);
