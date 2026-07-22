@@ -10,11 +10,7 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 client.on('ready', async () => {
     console.log('تم تسجيل الدخول بنجاح وتشغيل البوت!');
     
-    // الدخول إلى القناة المحددة
-    await client.channel.join(CHANNEL_ID);
-    console.log(`تم الدخول إلى القناة رقم: ${CHANNEL_ID}`);
-
-    // بدء حلقة الأوامر المتكررة
+    // بدء حلقة الأوامر المتكررة مباشرة
     startLoop();
 });
 
@@ -40,7 +36,7 @@ async function startLoop() {
 
             console.log('تم الانتهاء من إرسال الأوامر. جاري الانتظار لمدة 6 دقائق...');
             
-            // الانتظار لمدة 6 دقائق (6 دقائق × 60 ثانية × 1000 مللي ثانية = 360,000)
+            // الانتظار لمدة 6 دقائق
             await sleep(6 * 60 * 1000);
 
         } catch (error) {
@@ -50,5 +46,4 @@ async function startLoop() {
     }
 }
 
-// تسجيل الدخول باستخدام متغيرات بيئة النظام
 client.login(process.env.U_MAIL, process.env.U_PASS);
