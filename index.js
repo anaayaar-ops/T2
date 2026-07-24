@@ -1,49 +1,39 @@
-import { WOLF } from 'wolf.js';
-const client = new WOLF();
+import 'dotenv/config';
+import wolfjs from 'wolf.js';
 
-const CHANNEL_ID = 66266;
-const TARGET_MEMBER = "002002";
+const { WOLF } = wolfjs;
 
-// دالة مخصصة لعملية الانتظار (بالمللي ثانية)
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const settings = {
+    identity: process.env.U_MAIL,
+    secret: process.env.U_PASS,
+    watchSubscriberId: 51660277 // العضوية اللي نراقب خاصها
+};
 
-client.on('ready', async () => {
-    console.log('تم تسجيل الدخول بنجاح وتشغيل البوت!');
-    
-    // بدء حلقة الأوامر المتكررة مباشرة
-    startLoop();
+const service = new WOLF();
+
+service.on('ready', () => {
+    console.log(`✅ متصل: ${service.currentSubscriber?.nickname ?? '(غير معروف)'}`);
+    console.log(`👀 نراقب الخاص من العضوية: ${settings.watchSubscriberId}`);
+    console.log('لا يوجد أي رد تلقائي أو تفاعل آخر — مراقبة فقط.\n');
 });
 
-async function startLoop() {
-    while (true) {
-        try {
-            console.log('بدء تنفيذ دورة الأوامر الجديدة...');
+service.on('message', async (message) => {
+    const senderId = message.sourceSubscriberId ?? message.authorId;
 
-            // 1. إرسال أمر القصف
-            await client.messaging.sendGroupMessage(CHANNEL_ID, '!ط قصف');
-            await sleep(2000); // انتظار ثانيتين
+    // نتجاهل أي شي مو خاص، أو خاص من شخص غير المطلوب
+    if (message.isGroup) return;
+    if (senderId !== settings.watchSubscriberId) return;
 
-            // 2. إرسال أمر الهدية مع العضوية بدون علامات تنصيص
-            await client.messaging.sendGroupMessage(CHANNEL_ID, `!ط هدية ${TARGET_MEMBER} 2000`);
-            await sleep(2000); // انتظار ثانيتين
+    console.log('──────── رسالة خاصة جديدة ────────');
+    console.log('الوقت:', new Date().toLocaleString('ar-SA'));
+    console.log('من:', senderId);
+    console.log('المحتوى الكامل (JSON):');
+    console.log(JSON.stringify(message, null, 2));
+    console.log('───────────────────────────────────\n');
+});
 
-            // 3. إرسال أمر الهجوم مع العضوية بدون علامات تنصيص
-            await client.messaging.sendGroupMessage(CHANNEL_ID, `!ط هجوم ${TARGET_MEMBER}`);
-            await sleep(2000); // انتظار ثانيتين
+service.on('error', (err) => {
+    console.error('❌ خطأ:', err);
+});
 
-            // 4. إرسال أمر التحالف
-            await client.messaging.sendGroupMessage(CHANNEL_ID, '!ط تحالف ايداع كل');
-
-            console.log('تم الانتهاء من إرسال الأوامر. جاري الانتظار لمدة 6 دقائق...');
-            
-            // الانتظار لمدة 6 دقائق
-            await sleep(6 * 60 * 1000);
-
-        } catch (error) {
-            console.error('حدث خطأ أثناء التنفيذ:', error);
-            await sleep(10000); // انتظار 10 ثوانٍ قبل إعادة المحاولة في حال حدوث خطأ مفاجئ
-        }
-    }
-}
-
-client.login(process.env.U_MAIL, process.env.U_PASS);
+service.login(settings.identity, settings.secret);
