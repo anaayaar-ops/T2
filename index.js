@@ -1,39 +1,38 @@
-import 'dotenv/config';
-import wolfjs from 'wolf.js';
+const { WOLF } = require('wolf.js');
+const client = new WOLF();
 
-const { WOLF } = wolfjs;
+const CHANNEL_ID = 66266;
+const TARGET_MEMBER = 00200;
 
-const settings = {
-    identity: process.env.U_MAIL,
-    secret: process.env.U_PASS,
-    watchSubscriberId: 51660277 // العضوية اللي نراقب خاصها
-};
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-const service = new WOLF();
-
-service.on('ready', () => {
-    console.log(`✅ متصل: ${service.currentSubscriber?.nickname ?? '(غير معروف)'}`);
-    console.log(`👀 نراقب الخاص من العضوية: ${settings.watchSubscriberId}`);
-    console.log('لا يوجد أي رد تلقائي أو تفاعل آخر — مراقبة فقط.\n');
+client.on('ready', async () => {
+    console.log('تم تسجيل الدخول بنجاح وتشغيل البوت!');
+    await client.channel.join(CHANNEL_ID);
+    console.log(`تم الدخول إلى القناة رقم: ${CHANNEL_ID}`);
+    startLoop();
 });
 
-service.on('message', async (message) => {
-    const senderId = message.sourceSubscriberId ?? message.authorId;
+async function startLoop() {
+    while (true) {
+        try {
+            console.log('بدء تنفيذ دورة الأوامر الجديدة...');
+            await client.channel.send(CHANNEL_ID, '!ط قصف');
+            await sleep(1000); // انتظار ثانية واحدة
+            await client.channel.send(CHANNEL_ID, `!ط هدية "${TARGET_MEMBER}" 2000`);
+            await sleep(1000); // انتظار ثانية واحدة
+            await client.channel.send(CHANNEL_ID, `!ط هجوم "${TARGET_MEMBER}"`);
+            await sleep(1000); // انتظار ثانية واحدة
+            await client.channel.send(CHANNEL_ID, '!ط خزينة ايداع كل');
 
-    // نتجاهل أي شي مو خاص، أو خاص من شخص غير المطلوب
-    if (message.isGroup) return;
-    if (senderId !== settings.watchSubscriberId) return;
+            console.log('تم الانتهاء من إرسال الأوامر. جاري الانتظار لمدة 6 دقائق...');
+            await sleep(6 * 60 * 1000);
 
-    console.log('──────── رسالة خاصة جديدة ────────');
-    console.log('الوقت:', new Date().toLocaleString('ar-SA'));
-    console.log('من:', senderId);
-    console.log('المحتوى الكامل (JSON):');
-    console.log(JSON.stringify(message, null, 2));
-    console.log('───────────────────────────────────\n');
-});
+        } catch (error) {
+            console.error('حدث خطأ أثناء التنفيذ:', error);
+            await sleep(10000); 
+        }
+    }
+}
 
-service.on('error', (err) => {
-    console.error('❌ خطأ:', err);
-});
-
-service.login(settings.identity, settings.secret);
+client.login(U_MAIL, U_PASS);
