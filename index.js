@@ -37,4 +37,4 @@ async function startLoop() {
     }
 }
 
-client.login(U_MAIL, U_PASS);
+client.login(process.env.U_MAIL, process.env.U_PASS);
