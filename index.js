@@ -1,10 +1,12 @@
-const { WOLF } = require('wolf.js');
-const client = new WOLF();
+import pkg from 'wolf.js';
+const { WOLF } = pkg;
 
 const CHANNEL_ID = 66266;
 const TARGET_MEMBER = 2;
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const client = new WOLF();
 
 client.on('ready', async () => {
     console.log('تم تسجيل الدخول بنجاح وتشغيل البوت!');
@@ -18,11 +20,11 @@ async function startLoop() {
         try {
             console.log('بدء تنفيذ دورة الأوامر الجديدة...');
             await client.channel.send(CHANNEL_ID, '!ط قصف');
-            await sleep(1000); // انتظار ثانية واحدة
+            await sleep(1000);
             await client.channel.send(CHANNEL_ID, `!ط هدية "${TARGET_MEMBER}" 2000`);
-            await sleep(1000); // انتظار ثانية واحدة
+            await sleep(1000);
             await client.channel.send(CHANNEL_ID, `!ط هجوم "${TARGET_MEMBER}"`);
-            await sleep(1000); // انتظار ثانية واحدة
+            await sleep(1000);
             await client.channel.send(CHANNEL_ID, '!ط خزينة ايداع كل');
 
             console.log('تم الانتهاء من إرسال الأوامر. جاري الانتظار لمدة 6 دقائق...');
