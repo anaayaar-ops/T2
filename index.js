@@ -1,53 +1,59 @@
-import { WOLF } from 'wolf.js';
-const client = new WOLF();
+import 'dotenv/config';
+import * as wolf from 'wolf.js';
 
-const CHANNEL_ID = 66266;
+console.log("========================================");
+console.log("🔍 تشخيص تسجيل الدخول فقط");
+console.log("الوقت:", new Date().toISOString());
+console.log("========================================");
 
-// دالة الانتظار (بالمللي ثانية)
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+// فحص المتغيرات (بدون كشف القيم الحساسة)
+console.log("U_MAIL موجود؟", !!process.env.U_MAIL);
+console.log("U_PASS موجود؟", !!process.env.U_PASS);
 
-client.on('ready', async () => {
-    console.log('تم تسجيل الدخول بنجاح وتشغيل البوت!');
+// إنشاء العميل
+const client = new wolf.WOLF({
+    device: wolf.DeviceType.ANDROID
+});
+console.log("✅ تم إنشاء العميل");
 
-    // تشغيل الدورتين بشكل متزامن (بدون انتظار إحداهما للأخرى)
-    startShortLoop();  // الدورة القصيرة
-    startLongLoop();   // الدورة الطويلة
+// التقاط أي أخطاء أو أحداث متعلقة بالاتصال
+client.on('error', (err) => {
+    console.error("💥 EVENT [error]:", err);
 });
 
-// الدورة القصيرة (كل دقيقتين)
-async function startShortLoop() {
-    while (true) {
-        try {
-            console.log('[قصيرة] بدء التنفيذ...');
-            await client.messaging.sendGroupMessage(CHANNEL_ID, '!مط ضرب 3');
-            await sleep(2000);
-            await client.messaging.sendGroupMessage(CHANNEL_ID, '!مط فتح');
-            console.log('[قصيرة] تم الإرسال، الانتظار دقيقتين...');
-            await sleep(2 * 60 * 1000);
-        } catch (error) {
-            console.error('[قصيرة] خطأ:', error);
-            await sleep(10000);
-        }
-    }
-}
+client.on('ready', () => {
+    console.log("------------------------------------------");
+    console.log("✅✅✅ تم تسجيل الدخول بنجاح!");
+    console.log("الاسم:", client.currentSubscriber?.nickname || "غير معروف");
+    console.log("المعرف:", client.currentSubscriber?.id || "غير معروف");
+    console.log("الوقت:", new Date().toISOString());
+    console.log("------------------------------------------");
+    process.exit(0); // نخرج فوراً لأن الهدف فقط التأكد من الدخول
+});
 
-// الدورة الطويلة (كل 61 دقيقة)
-async function startLongLoop() {
-    while (true) {
-        try {
-            console.log('[طويلة] بدء التنفيذ...');
-            await client.messaging.sendGroupMessage(CHANNEL_ID, '!مط شراء 1');
-            await sleep(2000);
-            await client.messaging.sendGroupMessage(CHANNEL_ID, '!مط بوست اضافي');
-            await sleep(2000);
-            await client.messaging.sendGroupMessage(CHANNEL_ID, 'نعم');
-            console.log('[طويلة] تم الإرسال، الانتظار 61 دقيقة...');
-            await sleep(61 * 60 * 1000);
-        } catch (error) {
-            console.error('[طويلة] خطأ:', error);
-            await sleep(10000);
-        }
-    }
-}
+// مهلة زمنية: لو ما صار ready خلال 25 ثانية نعتبرها معلّقة
+const timeout = setTimeout(() => {
+    console.error("⏱️ فشل: مرت 25 ثانية ولم يحدث تسجيل دخول (لا ready ولا خطأ صريح).");
+    console.error("   هذا يدل على أن الاتصال معلّق من جهة السيرفر.");
+    process.exit(1);
+}, 25000);
 
-client.login(process.env.U_MAIL, process.env.U_PASS);
+// محاولة تسجيل الدخول
+console.log("🔐 جاري محاولة تسجيل الدخول...");
+try {
+    const result = await client.login(process.env.U_MAIL, process.env.U_PASS);
+    console.log("🔓 login() انتهى بدون استثناء. الناتج:");
+    try {
+        console.log(JSON.stringify(result).slice(0, 800));
+    } catch {
+        console.log(result);
+    }
+} catch (err) {
+    clearTimeout(timeout);
+    console.error("❌❌❌ فشل تسجيل الدخول بخطأ صريح:");
+    console.error("   الرسالة:", err.message);
+    console.error("   الكود:", err.code);
+    console.error("   الحالة:", err.status || err.statusCode);
+    console.error("   التفاصيل:", err.stack);
+    process.exit(1);
+}
