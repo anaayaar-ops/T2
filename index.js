@@ -1,41 +1,49 @@
-import 'dotenv/config';
-import wolfjs from 'wolf.js';
+require('dotenv').config();
+const wolfjs = require('wolf.js');
+
 const { WOLF } = wolfjs;
 
-// ========== التوكن المستخرج من جلسة المتصفح ==========
-// ملاحظة: هذا التوكن له صلاحية محدودة، استبدله بآخر جديد عند انتهائه.
-const AUTH_TOKEN = 'WE-998d6cbf-5d43-45e8-a2ce-f1cc49289a1c';
-// =====================================================
+// قراءة البريد وكلمة المرور من ملف .env
+const email = process.env.U_MAIL;
+const password = process.env.U_PASS;
+
+if (!email || !password) {
+    console.error('❌ يرجى تعيين U_MAIL و U_PASS في ملف .env');
+    process.exit(1);
+}
+
+console.log(`🔐 محاولة تسجيل الدخول بـ ${email}...`);
 
 const service = new WOLF();
 
-// ========== حدث جاهزية البوت ==========
+// عند نجاح الاتصال
 service.on('ready', () => {
     console.log('✅ تم تسجيل الدخول بنجاح!');
-    console.log(`   الاسم: ${service.currentSubscriber.nickname}`);
-    console.log(`   المعرف: ${service.currentSubscriber.id}`);
-    console.log('🎯 البوت جاهز للعمل.');
+    console.log(`👤 اسم المستخدم: ${service.currentSubscriber?.nickname || 'غير معروف'}`);
     
-    // يمكنك إضافة أي كود تريده هنا بعد تسجيل الدخول
+    // محاولة استخراج التوكن من عدة خصائص محتملة
+    const token = service.token || service.accessToken || service._token || 
+                  service.currentSubscriber?.token || null;
+    
+    // محاولة استخراج AppCheckToken إن وجد
+    const appCheckToken = service.appCheckToken || service._appCheckToken || 
+                          service.firebaseToken || null;
+
+    console.log('🔑 التوكن (Token):', token || '⚠️ غير موجود');
+    console.log('🔐 AppCheckToken:', appCheckToken || '⚠️ غير موجود');
+
+    // طباعة كامل كائن الخدمة لاستكشاف الأخطاء (اختياري)
+    // console.log('📦 كامل كائن الخدمة:', JSON.stringify(service, null, 2));
+
+    // إنهاء البرنامج بعد الطباعة
+    process.exit(0);
 });
 
-// ========== حدث الأخطاء ==========
+// عند حدوث خطأ
 service.on('error', (err) => {
     console.error('❌ خطأ في الاتصال:', err);
+    process.exit(1);
 });
 
-// ========== تسجيل الدخول ==========
-(async () => {
-    try {
-        // المعامل الثالث هو التوكن (apiKey)
-        await service.login(
-            process.env.U_MAIL,   // البريد الإلكتروني من .env
-            process.env.U_PASS,   // كلمة المرور من .env
-            AUTH_TOKEN            // التوكن المستخرج
-        );
-        console.log('✅ تم إرسال طلب تسجيل الدخول بالتوكن.');
-    } catch (err) {
-        console.error('❌ فشل تسجيل الدخول:', err.message || err);
-        process.exit(1);
-    }
-})();
+// بدء محاولة تسجيل الدخول
+service.login(email, password);
