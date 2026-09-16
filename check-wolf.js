@@ -1,515 +1,368 @@
-import wolfjs from 'wolf.js';
-import { io } from 'socket.io-client';
-
-import {
-    loadSession,
-    closeSessionBrowser
-} from './session-loader.js';
-
-const { WOLF, OnlineState } = wolfjs;
+import fs from 'fs';
+import path from 'path';
+import AdmZip from 'adm-zip';
+import { chromium } from 'playwright';
 
 // ============================================================
-// ⚙️ الإعدادات
+// الإعدادات
 // ============================================================
 
-const settings = {
+const PROFILE_URL = process.env.WOLF_PROFILE_URL;
 
-    // القناة التي سيتم الإرسال إليها
-    channelId: 224,
+// مجلد الـ cache الدائم — هو الذي يُحفظ في GitHub Cache
+const PROFILE_CACHE_DIR = process.env.PROFILE_CACHE_DIR
+    ? path.resolve(process.env.PROFILE_CACHE_DIR)
+    : path.join(process.cwd(), 'profile-cache');
 
-    // ========================================================
-    // المهمة الأولى: هجوم
-    // ========================================================
-    attack: {
-        message: "!ملوك هجوم",
-        repeat: 3,
-        gapMs: 1000,           // ثانية بين كل رسالة
-        waitMs: 5 * 60 * 1000 + 1000  // 5:01 دقائق
-    },
+// مجلد Chrome User Data داخل الـ cache
+const USER_DATA_DIR = path.join(PROFILE_CACHE_DIR, 'user-data');
 
-    // ========================================================
-    // المهمة الثانية: تدريب
-    // ========================================================
-    training: {
-        message: "!ملوك تدريب",
-        repeat: 1,
-        gapMs: 0,
-        waitMs: 2 * 60 * 1000 + 1000  // 2:01 دقائق
-    },
-
-    // ========================================================
-    // المهمة الثالثة: مرتزقة
-    // ========================================================
-    mercenary: {
-        message: "!ملوك مرتزقة 🪶",
-        repeat: 3,
-        gapMs: 1000,           // ثانية بين كل رسالة
-        waitMs: 10 * 60 * 1000 + 1000 // 10:01 دقائق
-    }
-};
+let browserContext = null;
+let wolfPage = null;
 
 // ============================================================
-// ⚙️ متغيرات الاتصال
+// أدوات
 // ============================================================
 
-let service = null;
-let socket = null;
-let browserClosed = false;
-let running = true;
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-// ============================================================
-// أدوات مساعدة
-// ============================================================
-
-const sleep = ms =>
-    new Promise(resolve => setTimeout(resolve, ms));
-
-// ============================================================
-// إغلاق آمن
-// ============================================================
-
-async function shutdown(code = 0) {
-
-    running = false;
-
-    console.log('');
-    console.log('========================================');
-    console.log('🛑 جاري إنهاء التشغيل...');
-    console.log('========================================');
-
-    try {
-        if (socket) socket.disconnect();
-    } catch {}
-
-    try {
-        if (service?.websocket?.socket) {
-            service.websocket.socket.disconnect();
-        }
-    } catch {}
-
-    try {
-        if (!browserClosed) {
-            browserClosed = true;
-            await closeSessionBrowser();
-        }
-    } catch (err) {
-        console.log(
-            '⚠️ تعذر إغلاق جلسة Chrome:',
-            err?.message || err
-        );
-    }
-
-    console.log(`🏁 انتهى البرنامج — Code ${code}`);
-    process.exit(code);
+function maskToken(value) {
+    if (!value) return 'غير موجود';
+    const text = String(value);
+    if (text.length <= 16) return `${text.slice(0, 4)}...${text.slice(-4)}`;
+    return `${text.slice(0, 8)}...${text.slice(-8)}`;
 }
 
 // ============================================================
-// انتظار Authorization
+// Google Drive
 // ============================================================
 
-async function waitForSubscriber(timeoutMs = 60000) {
-
-    const started = Date.now();
-
-    console.log('⏳ انتظار Authorization...');
-
-    while (Date.now() - started < timeoutMs) {
-
-        if (service?.currentSubscriber?.id) {
-
-            console.log('');
-            console.log('========================================');
-            console.log('✅ Authorization complete');
-            console.log('========================================');
-
-            console.log(
-                `👤 الحساب: ${
-                    service.currentSubscriber.username ||
-                    service.currentSubscriber.nickname ||
-                    'غير معروف'
-                }`
-            );
-
-            console.log(
-                `🆔 ID: ${service.currentSubscriber.id}`
-            );
-
-            return true;
-        }
-
-        await sleep(500);
+function extractGoogleDriveFileId(url) {
+    if (!url) return null;
+    const patterns = [
+        /\/file\/d\/([a-zA-Z0-9_-]+)/,
+        /[?&]id=([a-zA-Z0-9_-]+)/,
+        /\/uc\?id=([a-zA-Z0-9_-]+)/
+    ];
+    for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match?.[1]) return match[1];
     }
-
-    return false;
+    return null;
 }
 
-// ============================================================
-// تهيئة WOLF Handlers
-// ============================================================
-
-async function initializeHandlers() {
-
-    console.log('⚙️ تهيئة WOLF handlers...');
-
-    await service.websocket.init();
-
-    const count = Object.keys(
-        service.websocket.handlers || {}
-    ).length;
-
-    console.log(`⚙️ تم تحميل ${count} handlers`);
-}
-
-// ============================================================
-// الاتصال باستخدام Chrome Profile
-// ============================================================
-
-async function connectUsingChromeProfile(credentials) {
-
-    const token = credentials?.token;
-    const appCheckToken = credentials?.appCheckToken || '';
-    const device = credentials?.device || 'web';
-
-    const isAppCheckEnabled = Boolean(
-        credentials?.isAppCheckEnabled ?? appCheckToken
-    );
-
-    if (!token) {
-        throw new Error(
-            'لم يتم العثور على v3APIToken في Google Chrome Profile.'
-        );
-    }
-
-    console.log('');
-    console.log('========================================');
-    console.log('🔐 بيانات جلسة Chrome');
-    console.log('========================================');
-
-    console.log(`🔐 WOLF Token length: ${token.length}`);
-    console.log(
-        appCheckToken
-            ? `🛡️ AppCheck length: ${appCheckToken.length}`
-            : '⚠️ AppCheck Token غير موجود'
-    );
-    console.log(`📱 Device: ${device}`);
-    console.log(
-        `🛡️ App Check: ${
-            isAppCheckEnabled ? 'enabled' : 'disabled'
-        }`
-    );
-    console.log('========================================');
-
-    service = new WOLF();
-
-    service.config.framework.login.token = token;
-    service.config.framework.login.onlineState =
-        OnlineState.BUSY;
-
-    if (appCheckToken) {
-        service.config.framework.login.appCheckToken =
-            appCheckToken;
-    }
-
-    await initializeHandlers();
-
-    const connection =
-        service._frameworkConfig?.get?.('connection');
-
-    const host =
-        connection?.host || 'https://v3-rc.palringo.com';
-
-    const port = connection?.port ?? 443;
-
-    const connectionDevice =
-        connection?.query?.device || device || 'web';
-
-    console.log('');
-    console.log('========================================');
-    console.log('🔌 بدء اتصال WOLF');
-    console.log('========================================');
-    console.log(`🌐 Host: ${host}`);
-    console.log(`🔌 Port: ${port}`);
-    console.log(`📱 Device: ${connectionDevice}`);
-    console.log('👻 Online State: INVISIBLE');
-
-    socket = io(
-        `${host}:${port}`,
-        {
-            transports: ['websocket'],
-            reconnection: true,
-            autoConnect: false,
-            query: {
-                token,
-                device: connectionDevice,
-                state:
-                    service.config.framework
-                        .login.onlineState,
-                version: connection?.version || undefined,
-                isAppCheckEnabled:
-                    isAppCheckEnabled ? 'true' : 'false',
-                appCheckToken:
-                    isAppCheckEnabled
-                        ? appCheckToken
-                        : undefined
-            }
-        }
-    );
-
-    service.websocket.socket = socket;
-
-    socket.on('connect', () => {
-        console.log('');
-        console.log('========================================');
-        console.log('🔗 تم الاتصال بـ WOLF Socket.IO');
-        console.log(`🔗 Connection ID: ${socket.id}`);
-        console.log('👻 الحالة: Invisible');
-        console.log('========================================');
-    });
-
-    socket.on('connect_error', error => {
-        console.error(
-            '❌ Connection error:',
-            error?.message || error
-        );
-    });
-
-    socket.on('disconnect', reason => {
-        console.log(`🔌 Connection closed: ${reason}`);
-    });
-
-    socket.onAny(async (eventName, data) => {
-        try {
-            if (eventName === 'group event update') return;
-
-            const handler =
-                service.websocket.handlers?.[eventName];
-
-            if (!handler) return;
-
-            await handler.process(data?.body ?? data);
-
-        } catch (error) {
-            console.error(
-                `❌ Handler error [${eventName}]:`,
-                error?.message || error
-            );
-        }
-    });
-
-    console.log('🔌 Connecting...');
-
-    socket.connect();
-
-    const ready = await waitForSubscriber(60000);
-
-    if (!ready) {
-        throw new Error(
-            'WOLF اتصل لكن Authorization لم يكتمل.'
-        );
-    }
-
-    console.log('');
-    console.log('🟢 WOLF جاهز.');
-}
-
-// ============================================================
-// إرسال رسالة إلى القناة
-// ============================================================
-
-async function sendToChannel(text) {
-
-    try {
-
-        await service.messaging.sendGroupMessage(
-            settings.channelId,
-            text
-        );
-
-        console.log(
-            `🚀 [${settings.channelId}] ← "${text}"`
-        );
-
-    } catch (err) {
-
-        console.error(
-            `❌ فشل إرسال "${text}":`,
-            err?.message || err
-        );
-    }
-}
-
-// ============================================================
-// حلقة مهمة عامة
-// ============================================================
-
-async function taskLoop(name, config) {
-
-    while (running) {
-
-        try {
-
-            console.log('');
-            console.log(
-                `▶️ [${name}] بدء الجولة — إرسال ${config.repeat} مرة`
-            );
-
-            for (let i = 0; i < config.repeat; i++) {
-
-                if (!running) return;
-
-                await sendToChannel(config.message);
-
-                if (
-                    i < config.repeat - 1 &&
-                    config.gapMs > 0
-                ) {
-                    await sleep(config.gapMs);
-                }
-            }
-
-            const waitSec = Math.round(
-                config.waitMs / 1000
-            );
-
-            console.log(
-                `⏳ [${name}] انتظار ${waitSec} ثانية...`
-            );
-
-            await sleep(config.waitMs);
-
-        } catch (err) {
-
-            console.error(
-                `❌ [${name}] خطأ في الحلقة:`,
-                err?.message || err
-            );
-
-            await sleep(5000);
-        }
-    }
-}
-
-// ============================================================
-// تشغيل المهام الثلاث
-// ============================================================
-
-function startTasks() {
-
-    console.log('');
-    console.log('========================================');
-    console.log('⚙️ تشغيل المهام');
-    console.log('========================================');
-    console.log(`🏠 القناة: ${settings.channelId}`);
-    console.log(
-        `1️⃣ هجوم    : "${settings.attack.message}" × ${settings.attack.repeat} كل 5:01 د`
-    );
-    console.log(
-        `2️⃣ تدريب   : "${settings.training.message}" × ${settings.training.repeat} كل 2:01 د`
-    );
-    console.log(
-        `3️⃣ مرتزقة  : "${settings.mercenary.message}" × ${settings.mercenary.repeat} كل 10:01 د`
-    );
-    console.log('========================================');
-
-    // تشغيل المهام بالتوازي — كل واحدة مستقلة تماماً
-    taskLoop('هجوم', settings.attack);
-    taskLoop('تدريب', settings.training);
-    taskLoop('مرتزقة', settings.mercenary);
-}
-
-// ============================================================
-// البرنامج الرئيسي
-// ============================================================
-
-async function main() {
-
-    console.log('');
-    console.log('========================================');
-    console.log('🐺 WOLF Bot — Multi-Task');
-    console.log('🐺 wolf.js 2.7.10');
-    console.log('========================================');
-    console.log('');
-
-    try {
-
-        console.log(
-            '🌐 قراءة جلسة WOLF من Chrome Profile...'
-        );
-
-        const credentials = await loadSession();
-
-        if (!credentials?.token) {
-            throw new Error(
-                'لم يتم العثور على v3APIToken في جلسة Chrome.'
-            );
-        }
-
-        console.log('✅ تم العثور على توكن WOLF');
-
-        if (credentials.appCheckToken) {
-            console.log(
-                `🛡️ AppCheck length: ${credentials.appCheckToken.length}`
-            );
-            console.log('✅ تم العثور على App Check Token');
+async function downloadGoogleDriveFile(fileId) {
+    const baseUrl = `https://drive.usercontent.google.com/download?id=${encodeURIComponent(fileId)}&export=download`;
+
+    console.log('🌐 تنزيل Chrome Profile من Google Drive...');
+    console.log(`🆔 File ID: ${fileId}`);
+
+    let response = await fetch(baseUrl, { redirect: 'follow' });
+    let buffer = Buffer.from(await response.arrayBuffer());
+
+    const contentType = response.headers.get('content-type') || '';
+    const textStart = buffer
+        .subarray(0, Math.min(buffer.length, 200000))
+        .toString('utf8');
+
+    const looksLikeHtml =
+        contentType.includes('text/html') ||
+        textStart.includes('<html') ||
+        textStart.includes('Google Drive') ||
+        textStart.includes('Virus scan warning');
+
+    if (looksLikeHtml) {
+        console.log('⚠️ Google Drive طلب تأكيد تنزيل...');
+
+        const confirmMatch = textStart.match(/confirm=([0-9A-Za-z_-]+)/);
+
+        if (confirmMatch?.[1]) {
+            const confirmUrl = `https://drive.usercontent.google.com/download?id=${encodeURIComponent(fileId)}&export=download&confirm=${encodeURIComponent(confirmMatch[1])}`;
+            response = await fetch(confirmUrl, { redirect: 'follow' });
+            buffer = Buffer.from(await response.arrayBuffer());
         } else {
-            console.log('⚠️ لا يوجد App Check Token');
+            const formMatch = textStart.match(/name="confirm"[^>]*value="([^"]+)"/i);
+            if (formMatch?.[1]) {
+                const confirmUrl = `https://drive.usercontent.google.com/download?id=${encodeURIComponent(fileId)}&export=download&confirm=${encodeURIComponent(formMatch[1])}`;
+                response = await fetch(confirmUrl, { redirect: 'follow' });
+                buffer = Buffer.from(await response.arrayBuffer());
+            } else {
+                throw new Error('❌ Google Drive أعاد صفحة تأكيد بدون رمز.');
+            }
         }
+        console.log(`📦 تم التنزيل: ${(buffer.length / 1024 / 1024).toFixed(2)} MB`);
+    } else {
+        console.log(`📦 تم التنزيل: ${(buffer.length / 1024 / 1024).toFixed(2)} MB`);
+    }
 
-        console.log(
-            `📱 Device: ${credentials.device || 'web'}`
-        );
+    return buffer;
+}
 
-        await connectUsingChromeProfile(credentials);
+async function downloadFile(url) {
+    if (!url) throw new Error('❌ WOLF_PROFILE_URL غير موجود');
 
-        // ضبط الحالة Invisible
-        try {
-            await service.setOnlineState(OnlineState.BUSY);
-            console.log('👻 تم ضبط الحالة إلى Invisible');
-        } catch (err) {
-            console.log(
-                '⚠️ تعذر ضبط الحالة عبر API:',
-                err?.message || err
-            );
-        }
+    const googleDriveId = extractGoogleDriveFileId(url);
+    if (googleDriveId) return await downloadGoogleDriveFile(googleDriveId);
 
-        // تشغيل المهام
-        startTasks();
+    console.log('🌐 تنزيل Profile من الرابط...');
+    const response = await fetch(url, { redirect: 'follow' });
+    if (!response.ok) throw new Error(`❌ فشل التنزيل: HTTP ${response.status}`);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    console.log(`📦 تم التنزيل: ${(buffer.length / 1024 / 1024).toFixed(2)} MB`);
+    return buffer;
+}
 
-        console.log('');
-        console.log('========================================');
-        console.log('🟢 البوت يعمل الآن');
-        console.log('👻 الحالة: Invisible');
-        console.log('========================================');
-
-    } catch (err) {
-
-        console.error('');
-        console.error('========================================');
-        console.error('❌ حصل خطأ');
-        console.error('========================================');
-
-        console.error(
-            err?.stack || err?.message || err
-        );
-
-        await shutdown(1);
+function validateZipFile(buffer) {
+    if (!buffer || buffer.length < 4) throw new Error('❌ ملف فارغ');
+    const signature = buffer.subarray(0, 4).toString('hex').toLowerCase();
+    console.log(`🔎 ZIP Signature: ${signature}`);
+    if (signature !== '504b0304' && signature !== '504b0506' && signature !== '504b0708') {
+        throw new Error(`❌ ليس ZIP صالحًا. Signature: ${signature}`);
     }
 }
 
 // ============================================================
-// إيقاف آمن
+// كشف بروفايل صالح
 // ============================================================
 
-process.on('SIGINT', async () => {
-    await shutdown(0);
-});
+function findUserDataRoot(dir) {
+    if (!fs.existsSync(dir)) return null;
 
-process.on('SIGTERM', async () => {
-    await shutdown(0);
-});
+    // المجلد نفسه هو root
+    if (
+        fs.existsSync(path.join(dir, 'Default')) ||
+        fs.existsSync(path.join(dir, 'Local State'))
+    ) {
+        return dir;
+    }
+
+    // أسماء معروفة
+    const knownNames = [
+        'profile', 'Profile', 'chrome-profile',
+        'Chrome User Data', 'user-data', 'User Data'
+    ];
+    for (const name of knownNames) {
+        const sub = path.join(dir, name);
+        if (
+            fs.existsSync(path.join(sub, 'Default')) ||
+            fs.existsSync(path.join(sub, 'Local State'))
+        ) {
+            return sub;
+        }
+    }
+
+    // أي مجلد فرعي
+    let items = [];
+    try { items = fs.readdirSync(dir); } catch { return null; }
+
+    for (const name of items) {
+        const sub = path.join(dir, name);
+        try {
+            if (!fs.statSync(sub).isDirectory()) continue;
+        } catch { continue; }
+        if (
+            fs.existsSync(path.join(sub, 'Default')) ||
+            fs.existsSync(path.join(sub, 'Local State'))
+        ) {
+            return sub;
+        }
+    }
+
+    return null;
+}
+
+function extractProfile(buffer) {
+    fs.mkdirSync(USER_DATA_DIR, { recursive: true });
+    console.log(`📦 فك البروفايل إلى: ${USER_DATA_DIR}`);
+
+    const zip = new AdmZip(buffer);
+    const entries = zip.getEntries();
+    console.log(`📁 عدد الملفات: ${entries.length}`);
+
+    zip.extractAllTo(USER_DATA_DIR, true);
+
+    const root = findUserDataRoot(USER_DATA_DIR);
+    if (!root) throw new Error('❌ لا يوجد بروفايل صالح بعد الفك');
+
+    console.log(`📂 Chrome User Data: ${root}`);
+    return root;
+}
 
 // ============================================================
-// START
+// قراءة التوكنات
 // ============================================================
 
-main();
+async function readWolfTokens(page) {
+    return await page.evaluate(() => {
+        const result = { token: null, appCheckToken: null };
+
+        const scan = (storage) => {
+            try {
+                for (let i = 0; i < storage.length; i++) {
+                    const key = storage.key(i);
+                    if (!key) continue;
+                    const value = storage.getItem(key);
+                    if (!value) continue;
+                    const lk = key.toLowerCase();
+
+                    if (!result.token && (lk.includes('v3apitoken') || lk.includes('v3_api_token'))) {
+                        result.token = value;
+                    }
+                    if (!result.appCheckToken && (lk.includes('appchecktoken') || lk.includes('app_check_token'))) {
+                        result.appCheckToken = value;
+                    }
+                }
+            } catch {}
+        };
+
+        scan(localStorage);
+        scan(sessionStorage);
+
+        return result;
+    });
+}
+
+// ============================================================
+// تشغيل المتصفح
+// ============================================================
+
+async function launchWolfBrowser(userDataDir) {
+    console.log('🚀 تشغيل Chromium...');
+
+    browserContext = await chromium.launchPersistentContext(userDataDir, {
+        headless: true,
+        viewport: { width: 1440, height: 900 },
+        userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        locale: 'ar-SA',
+        timezoneId: 'Asia/Riyadh',
+        args: [
+            '--disable-blink-features=AutomationControlled',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--no-first-run',
+            '--no-default-browser-check'
+        ]
+    });
+
+    const pages = browserContext.pages();
+    wolfPage = pages[0] || await browserContext.newPage();
+
+    console.log('🌐 فتح WOLF...');
+    await wolfPage.goto('https://app.wolf.live/mna', {
+        waitUntil: 'domcontentloaded',
+        timeout: 120000
+    });
+    console.log(`🌐 URL: ${wolfPage.url()}`);
+
+    return wolfPage;
+}
+
+// ============================================================
+// loadSession
+// ============================================================
+
+export async function loadSession() {
+    console.log('');
+    console.log('========================================');
+    console.log('🔐 WOLF Chrome Profile');
+    console.log('========================================');
+    console.log(`📂 Cache Dir: ${PROFILE_CACHE_DIR}`);
+    console.log(`📂 User Data: ${USER_DATA_DIR}`);
+
+    const existingRoot = findUserDataRoot(USER_DATA_DIR);
+    let userDataDir;
+
+    if (existingRoot) {
+        userDataDir = existingRoot;
+        console.log('✅ استخدام البروفايل من Cache (يحتوي توكنات مُحدَّثة)');
+        try {
+            const stat = fs.statSync(existingRoot);
+            console.log(`🕐 آخر تعديل: ${stat.mtime.toISOString()}`);
+        } catch {}
+    } else {
+        if (!PROFILE_URL) {
+            throw new Error('❌ لا Cache ولا WOLF_PROFILE_URL');
+        }
+
+        console.log('📥 لا يوجد Cache — تنزيل من Google Drive...');
+        const zipBuffer = await downloadFile(PROFILE_URL);
+        console.log(`📏 الحجم: ${(zipBuffer.length / 1024 / 1024).toFixed(2)} MB`);
+        validateZipFile(zipBuffer);
+        userDataDir = extractProfile(zipBuffer);
+    }
+
+    const page = await launchWolfBrowser(userDataDir);
+
+    console.log('⏳ انتظار جلسة WOLF...');
+    await sleep(5000);
+
+    let credentials = { token: null, appCheckToken: null };
+
+    for (let i = 1; i <= 60; i++) {
+        credentials = await readWolfTokens(page);
+        console.log(`⏳ قراءة credentials: ${i}/60`);
+
+        if (credentials.token) {
+            console.log('✅ تم إيجاد v3APIToken');
+            // انتظر إضافي لجدولة تجديد App Check
+            await sleep(8000);
+            const refreshed = await readWolfTokens(page);
+            if (refreshed.appCheckToken) credentials.appCheckToken = refreshed.appCheckToken;
+            break;
+        }
+
+        await sleep(1000);
+    }
+
+    if (!credentials.token) {
+        throw new Error('❌ لم يتم العثور على v3APIToken');
+    }
+
+    console.log('');
+    console.log('========================================');
+    console.log('🔐 WOLF Credentials');
+    console.log('========================================');
+    console.log(`🔐 v3APIToken: ${maskToken(credentials.token)}`);
+    console.log(`🔐 Token length: ${credentials.token.length}`);
+
+    if (credentials.appCheckToken) {
+        console.log(`🛡️ appCheckToken: ${maskToken(credentials.appCheckToken)}`);
+        console.log(`🛡️ AppCheck length: ${credentials.appCheckToken.length}`);
+    } else {
+        console.log('⚠️ لا يوجد appCheckToken');
+    }
+    console.log('📱 Device: web');
+    console.log('========================================');
+
+    return {
+        token: credentials.token,
+        appCheckToken: credentials.appCheckToken || null,
+        device: 'web',
+        isAppCheckEnabled: Boolean(credentials.appCheckToken),
+        page
+    };
+}
+
+// ============================================================
+// إغلاق المتصفح (مع الحفاظ على البروفايل)
+// ============================================================
+
+export async function closeSessionBrowser() {
+    try {
+        if (browserContext) {
+            console.log('🔒 إغلاق المتصفح (لحفظ التوكنات المُحدَّثة)...');
+            await browserContext.close();
+            browserContext = null;
+            wolfPage = null;
+            console.log('✅ تم إغلاق المتصفح — البروفايل جاهز للحفظ في Cache');
+        }
+    } catch (error) {
+        console.error('⚠️ خطأ أثناء الإغلاق:', error?.message || error);
+    }
+
+    // ⚠️ مهم: لا نحذف USER_DATA_DIR — سيُحفظ في GitHub Cache
+}
