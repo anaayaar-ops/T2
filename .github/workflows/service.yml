@@ -1,72 +1,39 @@
-name: WOLF Event Bot
+name: WOLF Bot
 
 on:
-  schedule:
-    - cron: '0 */4 * * *'   # كل 4 ساعات
   workflow_dispatch:
+  schedule:
+    - cron: "0 */4 * * *"
 
 concurrency:
-  group: wolf-event-bot
-  cancel-in-progress: true   # يقتل النسخة السابقة عند بدء نسخة جديدة
+  group: wolf-bot
+  cancel-in-progress: true
 
 jobs:
   wolf:
     runs-on: ubuntu-latest
-
-    # 5 ساعات كحد أقصى (الحد المجاني 6 ساعات)
-    timeout-minutes: 300
+    timeout-minutes: 330
 
     steps:
-      # ======================================================
-      # Checkout
-      # ======================================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ======================================================
-      # Node.js
-      # ======================================================
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
 
-      # ======================================================
-      # Install Dependencies
-      # ======================================================
-      - name: Install dependencies
+      - name: Install System Dependencies (Xvfb)
         run: |
-          echo "📦 Installing dependencies..."
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      - name: Install Project Dependencies
+        run: |
           npm install
-          echo "🌐 Installing Playwright Chromium..."
           npx playwright install --with-deps chromium
-          echo "✅ Dependencies installed"
 
-      # ======================================================
-      # Restore Profile from Cache
-      # ======================================================
-      - name: Restore WOLF profile from cache
-        id: profile-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ./profile-cache
-          key: wolf-profile-${{ github.run_id }}
-          restore-keys: |
-            wolf-profile-
-
-      - name: Profile cache status
-        run: |
-          if [ -d "./profile-cache/user-data" ] && [ -n "$(ls -A ./profile-cache/user-data 2>/dev/null)" ]; then
-            echo "✅ Cache موجود — سيتم استخدام البروفايل المُحدَّث"
-            du -sh ./profile-cache/user-data || true
-          else
-            echo "ℹ️ لا يوجد Cache — سيتم التنزيل من Google Drive"
-          fi
-
-      # ======================================================
-      # Check Profile URL
-      # ======================================================
       - name: Check WOLF Profile Secret
         env:
           WOLF_PROFILE_URL: ${{ secrets.WOLF_PROFILE_URL }}
@@ -78,38 +45,36 @@ jobs:
           echo "✅ WOLF_PROFILE_URL is available"
 
       # ======================================================
-      # Run Bot
+      # Run Bot (Forced Direct Download)
       # ======================================================
       - name: Run WOLF Event Task
         env:
           WOLF_PROFILE_URL: ${{ secrets.WOLF_PROFILE_URL }}
           PROFILE_CACHE_DIR: ${{ github.workspace }}/profile-cache
+          FORCE_FRESH_DOWNLOAD: "true"
         run: |
-          echo "🕐 Start: $(date)"
-          echo "🎯 DEVICE: web"
-          echo "🛡️ APP CHECK: true"
-          npm start
+          echo "========================================"
+          echo "🐺 WOLF BOT STARTING (FORCE DIRECT DOWNLOAD)"
+          echo "🕐 Start time: $(date)"
+          echo "========================================"
+          
+          xvfb-run --auto-servernum --server-args="-screen 0 1366x768x24" npm start
+          
           EXIT_CODE=$?
-          echo "🕐 End: $(date)"
+          echo "🕐 End time: $(date)"
           exit $EXIT_CODE
 
       # ======================================================
-      # Save Refreshed Profile to Cache
-      # ======================================================
-      - name: Save WOLF profile to cache
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: ./profile-cache
-          key: wolf-profile-${{ github.run_id }}
-
-      # ======================================================
-      # Cleanup
+      # Final Cleanup
       # ======================================================
       - name: Final Cleanup
         if: always()
         run: |
+          echo "🧹 FINAL CLEANUP"
           pkill -TERM -f "node check-wolf.js" 2>/dev/null || true
           sleep 2
           pkill -KILL -f "node check-wolf.js" 2>/dev/null || true
+          pkill -TERM -f "Xvfb" 2>/dev/null || true
+          sleep 2
+          pkill -KILL -f "Xvfb" 2>/dev/null || true
           echo "✅ Cleanup done"
