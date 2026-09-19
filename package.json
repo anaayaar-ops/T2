@@ -8,6 +8,6 @@
   },
   "dependencies": {
     "socket.io-client": "^4.7.0",
-    "wolf.js": "^3.0.0"
+    "wolf.js": "^2.6.4"
   }
 }
