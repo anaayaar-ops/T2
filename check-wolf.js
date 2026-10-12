@@ -153,7 +153,7 @@ async function connectUsingGitHubTokens(credentials) {
 
     service = new wolfjs.WOLF();
     service.config.framework.login.token = token;
-    service.config.framework.login.onlineState = OnlineState.BUSY;
+    service.config.framework.login.onlineState = OnlineState.INVISIBLE;
     service.config.framework.login.appCheckToken = appCheckToken;
 
     await initializeHandlers();
